@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "outboxstack"
+version = "0.1.0"
+description = "Outbox Stack email SDK for Python: send, track and verify webhooks"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "Outbox Stack", email = "support@outboxstack.app" }]
+keywords = ["email", "transactional email", "smtp", "outbox stack", "nigeria"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: Communications :: Email",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://outboxstack.app"
+Documentation = "https://outboxstack.app/docs/"
+Source = "https://github.com/Outbox-Stack/outbox-python"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+outboxstack = ["py.typed"]
