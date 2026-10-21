@@ -94,6 +94,8 @@ def outbox_hook():
     return "", 200
 ```
 
+`message.bounced` and `message.deferred` carry `bounce_type`, `bounce_subtype`, `diagnostic` and `soft_bounce_count`, and `suppressed` says whether the event added the address to your suppressions. Events from test API keys have `test: True`. The `WebhookEvent` and `MessageEventData` types describe every field.
+
 Events can arrive more than once: deduplicate on the `webhook-id` header. See [the event reference](https://outboxstack.app/docs/#events).
 
 ## Licence

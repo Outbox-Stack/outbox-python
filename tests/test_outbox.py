@@ -124,6 +124,11 @@ class WebhookTests(unittest.TestCase):
         event = verify_webhook(body, self.signed(body), self.secret, now=1700000100)
         self.assertEqual((event["type"], event["data"]["bounce_type"]), ("message.bounced", "hard"))
 
+    def test_deferred_event_carries_the_bounce_detail(self):
+        body = b'{"type":"message.deferred","created_at":"2026-10-08T10:00:00Z","data":{"to":"a@b.co","bounce_type":"soft","reason":"soft_bounce","soft_bounce_count":2,"suppressed":false,"test":true}}'
+        data = verify_webhook(body, self.signed(body), self.secret, now=1700000100)["data"]
+        self.assertEqual((data["bounce_type"], data["reason"], data["soft_bounce_count"], data["suppressed"], data["test"]), ("soft", "soft_bounce", 2, False, True))
+
     def test_rejects_tampering_old_timestamps_and_missing_headers(self):
         body = b'{"type":"message.sent"}'
         with self.assertRaises(WebhookVerificationError):

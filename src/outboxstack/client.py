@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Tuple
 
 from .errors import OutboxApiError, OutboxConnectionError, OutboxError
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 DEFAULT_BASE_URL = "https://outboxstack.app"
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
