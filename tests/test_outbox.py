@@ -90,10 +90,10 @@ class SendTests(unittest.TestCase):
 class ReadTests(unittest.TestCase):
     def test_iter_messages_follows_pages(self):
         t = FakeTransport((200, {"messages": [{"id": "1"}, {"id": "2"}], "next": "c1"}), (200, {"messages": [{"id": "3"}], "next": None}))
-        ids = [m["id"] for m in client(t).iter_messages(status="bounced")]
+        ids = [m["id"] for m in client(t).iter_messages(status="bounced", stream="marketing")]
         self.assertEqual(ids, ["1", "2", "3"])
-        self.assertEqual(t.calls[0]["url"], "https://outboxstack.app/v1/messages?status=bounced")
-        self.assertEqual(t.calls[1]["url"], "https://outboxstack.app/v1/messages?status=bounced&after=c1")
+        self.assertEqual(t.calls[0]["url"], "https://outboxstack.app/v1/messages?status=bounced&stream=marketing")
+        self.assertEqual(t.calls[1]["url"], "https://outboxstack.app/v1/messages?status=bounced&stream=marketing&after=c1")
 
     def test_remove_suppression_escapes_the_address_and_is_not_retried(self):
         t = FakeTransport((503, {"error": "busy"}))
@@ -128,6 +128,11 @@ class WebhookTests(unittest.TestCase):
         body = b'{"type":"message.deferred","created_at":"2026-10-08T10:00:00Z","data":{"to":"a@b.co","bounce_type":"soft","reason":"soft_bounce","soft_bounce_count":2,"suppressed":false,"test":true}}'
         data = verify_webhook(body, self.signed(body), self.secret, now=1700000100)["data"]
         self.assertEqual((data["bounce_type"], data["reason"], data["soft_bounce_count"], data["suppressed"], data["test"]), ("soft", "soft_bounce", 2, False, True))
+
+    def test_suppressed_event_carries_the_reason(self):
+        body = b'{"type":"message.suppressed","created_at":"2026-11-24T10:00:00Z","data":{"to":"a@b.co","reason":"unverified","description":"Not sent."}}'
+        event = verify_webhook(body, self.signed(body), self.secret, now=1700000100)
+        self.assertEqual((event["type"], event["data"]["reason"], event["data"]["description"]), ("message.suppressed", "unverified", "Not sent."))
 
     def test_rejects_tampering_old_timestamps_and_missing_headers(self):
         body = b'{"type":"message.sent"}'

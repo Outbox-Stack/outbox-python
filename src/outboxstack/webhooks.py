@@ -27,6 +27,7 @@ class MessageEventData(TypedDict, total=False):
     bounce_subtype: Optional[str]
     diagnostic: Optional[str]
     reason: str
+    description: str
     soft_bounce_count: Optional[int]
     suppressed: bool
     test: bool
@@ -66,7 +67,9 @@ def verify_webhook(
     """Verifies a signed webhook (Standard Webhooks) and returns the parsed event.
 
     message.bounced is a final hard bounce. message.deferred is a soft bounce or delivery delay and is not
-    final: `data["bounce_type"]` is "soft" for a soft bounce and None for a delay.
+    final: `data["bounce_type"]` is "soft" for a soft bounce and None for a delay. message.suppressed was
+    never sent: `data["reason"]` is a suppression reason or "known_dead_address", and `data["description"]`
+    says why in plain words.
     Pass the raw request body exactly as received, not re-serialised JSON, and the request headers.
     Raises WebhookVerificationError on a bad signature or a timestamp outside the tolerance (default 5 minutes).
     """

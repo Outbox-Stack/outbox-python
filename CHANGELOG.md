@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+Matches the Node.js SDK 0.6. Requires the matching API release for `message.suppressed` webhooks.
+
+- `MessageEventData` gains `description` for `message.suppressed`, the new event for a message that was held back and never sent. `reason` is a suppression reason or `known_dead_address`.
+- `SuppressionReason` includes `unverified` (Amazon's pre-send address check); `list_suppressions()` and `iter_suppressions()` return typed `Suppression` dicts. `remove_suppression()` removes `manual` and `unverified` suppressions.
+- `list_messages()`, `list_messages_page()` and `iter_messages()` accept `stream` (`transactional` or `marketing`).
+- `get_message()` returns a typed `MessageDetail`, with `events` and `problem` (a `DeliveryProblem`). Runtime behaviour is unchanged: these keys were already in the returned dict.
+
 ## 0.2.0
 
 Matches the Node.js SDK 0.5.

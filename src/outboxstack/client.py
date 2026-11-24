@@ -12,16 +12,82 @@ import urllib.parse
 import urllib.request
 import uuid
 from email.utils import parsedate_to_datetime
-from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Literal, Mapping, Optional, Tuple, TypedDict
 
 from .errors import OutboxApiError, OutboxConnectionError, OutboxError
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 DEFAULT_BASE_URL = "https://outboxstack.app"
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 #: (method, url, headers, body, timeout) -> (status, headers, body). Raises socket.timeout or OSError when there's no answer.
 Transport = Callable[[str, str, Dict[str, str], Optional[bytes], float], Tuple[int, Mapping[str, str], bytes]]
+
+Stream = Literal["transactional", "marketing"]
+
+#: ``unverified``: Amazon's pre-send address check judged the inbox very unlikely to exist.
+SuppressionReason = Literal["bounce", "complaint", "unsubscribe", "manual", "unverified"]
+
+
+class Suppression(TypedDict):
+    email: str
+    reason: SuppressionReason
+    created_at: str
+
+
+class DeliveryProblem(TypedDict, total=False):
+    """A plain-language reading of why a message didn't reach the inbox. ``diagnostic`` and ``pending`` may be absent.
+
+    ``code`` is for example address_not_found, domain_not_found, mailbox_full, unverified_address,
+    previously_bounced, rejected_by_receiver, bounced, temporary_failure or delayed.
+    """
+
+    code: str
+    title: str
+    detail: str
+    action: str
+    diagnostic: str
+    pending: bool
+
+
+class MessageEvent(TypedDict, total=False):
+    """One step in a message's history. ``subtype`` and ``diagnostic`` appear only when the provider reports them."""
+
+    type: str
+    at: str
+    subtype: str
+    diagnostic: str
+
+
+class MessageDetail(TypedDict, total=False):
+    """What get_message returns. ``problem`` is present when the latest feedback was a bounce, delay or skip;
+    ``campaign_id`` is absent and ``test`` is True on test-key messages."""
+
+    id: str
+    stream: Stream
+    to_email: str
+    to_name: Optional[str]
+    from_email: str
+    from_name: Optional[str]
+    reply_to: Optional[str]
+    subject: str
+    html: Optional[str]
+    text: Optional[str]
+    status: str
+    attempts: int
+    last_error: Optional[str]
+    idempotency_key: Optional[str]
+    provider_message_id: Optional[str]
+    template_id: Optional[str]
+    campaign_id: Optional[str]
+    extras: Optional[Dict[str, Any]]
+    metadata: Optional[Dict[str, str]]
+    events: List[MessageEvent]
+    problem: DeliveryProblem
+    test: bool
+    created_at: str
+    updated_at: str
+    sent_at: Optional[str]
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -145,14 +211,14 @@ class Outbox:
         retryable = all("idempotencyKey" in m for m in messages)
         return self._request("POST", "/v1/messages/batch", body={"messages": [_encode(m) for m in messages]}, retryable=retryable)
 
-    def get_message(self, message_id: str) -> Dict[str, Any]:
+    def get_message(self, message_id: str) -> MessageDetail:
         if not isinstance(message_id, str) or not _UUID.match(message_id):
             raise OutboxError("A message UUID is required")
         return self._request("GET", "/v1/messages/" + message_id, retryable=True)
 
-    def list_messages_page(self, *, status: Optional[str] = None, to: Optional[str] = None, limit: Optional[int] = None, after: Optional[str] = None) -> Dict[str, Any]:
+    def list_messages_page(self, *, status: Optional[str] = None, stream: Optional[Stream] = None, to: Optional[str] = None, limit: Optional[int] = None, after: Optional[str] = None) -> Dict[str, Any]:
         """One page, most recent first: ``{"messages": [...], "next": ...}``. Pass ``next`` back as ``after`` until it's None."""
-        return self._request("GET", "/v1/messages" + _query({"status": status, "to": to, "limit": limit, "after": after}), retryable=True)
+        return self._request("GET", "/v1/messages" + _query({"status": status, "stream": stream, "to": to, "limit": limit, "after": after}), retryable=True)
 
     def list_messages(self, **options: Any) -> List[Dict[str, Any]]:
         """The newest messages. For older ones use list_messages_page() or iter_messages()."""
@@ -177,10 +243,10 @@ class Outbox:
         """One page, newest first. Suppression calls need a full-access API key."""
         return self._request("GET", "/v1/suppressions" + _query({"limit": limit, "after": after}), retryable=True)
 
-    def list_suppressions(self, **options: Any) -> List[Dict[str, Any]]:
+    def list_suppressions(self, **options: Any) -> List[Suppression]:
         return self.list_suppressions_page(**options)["suppressions"]
 
-    def iter_suppressions(self, *, after: Optional[str] = None, **options: Any) -> Iterator[Dict[str, Any]]:
+    def iter_suppressions(self, *, after: Optional[str] = None, **options: Any) -> Iterator[Suppression]:
         while True:
             page = self.list_suppressions_page(after=after, **options)
             yield from page["suppressions"]
@@ -194,7 +260,9 @@ class Outbox:
         return self._request("POST", "/v1/suppressions", body={"email": email}, retryable=True)
 
     def remove_suppression(self, email: str) -> Dict[str, Any]:
-        """Removes a ``manual`` suppression. Bounces, complaints and unsubscribes can't be removed (code ``conflict``).
+        """Removes a ``manual`` or ``unverified`` suppression. Bounces, complaints and unsubscribes can't be removed (code ``conflict``).
+
+        Removing an ``unverified`` one also skips Amazon's address check for that address from then on.
 
         Not retried automatically: a retry after a lost response would report ``not_found`` for an address that was removed.
         """

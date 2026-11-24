@@ -41,13 +41,15 @@ Also: `send_batch(messages)` (1–100 messages, each may carry `idempotencyKey`)
 ## Find messages
 
 ```python
-recent = outbox.list_messages(status="bounced", limit=100)   # newest 100
+recent = outbox.list_messages(status="bounced", stream="marketing", limit=100)   # newest 100
 
 for m in outbox.iter_messages(status="bounced", to="@example.com"):
     print(m["id"], m["to_email"], m["created_at"])          # every match, a page at a time
 ```
 
 To page by hand, call `list_messages_page()` and pass its `next` back as `after` until it's `None`.
+
+`get_message(id)` returns the message with its `events`. When the latest feedback was a bounce, delay or skip, `problem` explains it in plain words (`code`, `title`, `detail`, `action`).
 
 ## Cancel, suppress
 
@@ -61,10 +63,12 @@ except OutboxApiError as e:
         raise
 
 outbox.add_suppression("ada@example.com")       # needs a full-access key
-outbox.remove_suppression("ada@example.com")    # manual suppressions only
+outbox.remove_suppression("ada@example.com")    # manual and unverified suppressions only
 for s in outbox.iter_suppressions():
     print(s["email"], s["reason"])
 ```
+
+An `unverified` suppression means Amazon's pre-send check judged the address very unlikely to exist. Removing it also skips that check for the address from then on.
 
 ## Errors
 
@@ -91,6 +95,7 @@ def outbox_hook():
     if event["type"] == "message.bounced":            # a hard bounce: final
         mark_undeliverable(event["data"]["to"])
     # message.deferred is a soft bounce or delay: not final, so don't give up on the address.
+    # message.suppressed was never sent: data["reason"] and data["description"] say why.
     return "", 200
 ```
 
